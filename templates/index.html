@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI语音聊天助手 - Python版</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #4f46e5, #7c3aed);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .chat-container {
+            height: 450px;
+            overflow-y: auto;
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .conversation {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            max-width: 85%;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .user-message {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .ai-message {
+            align-self: flex-start;
+        }
+
+        .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            flex-shrink: 0;
+        }
+
+        .user-message .avatar {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .ai-message .avatar {
+            background: #10b981;
+            color: white;
+        }
+
+        .content {
+            background: white;
+            padding: 15px 18px;
+            border-radius: 18px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            font-size: 1rem;
+            line-height: 1.5;
+        }
+
+        .user-message .content {
+            background: #4f46e5;
+            color: white;
+        }
+
+        .ai-message .content {
+            background: white;
+            border: 1px solid #e2e8f0;
+        }
+
+        .controls {
+            padding: 30px;
+            text-align: center;
+            background: white;
+        }
+
+        .control-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .mic-button, .text-button {
+            width: 100px;
+            height: 100px;
+            border-radius: 50%;
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .mic-button {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
+
+        .text-button {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+        }
+
+        .mic-button:hover:not(:disabled), .text-button:hover {
+            transform: scale(1.05);
+        }
+
+        .mic-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .mic-button.recording {
+            background: linear-gradient(135deg, #10b981, #059669);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .button-icon {
+            font-size: 2rem;
+            margin-bottom: 8px;
+        }
+
+        .button-text {
+            font-size: 0.8rem;
+        }
+
+        .status {
+            font-size: 1.1rem;
+            font-weight: 500;
+            color: #6b7280;
+            margin-bottom: 20px;
+        }
+
+        .status.listening {
+            color: #10b981;
+            font-weight: 600;
+        }
+
+        .status.processing {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
+        .text-input-section {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .text-input-section.active {
+            display: block;
+        }
+
+        .text-input {
+            display: flex;
+            gap: 10px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        #messageInput:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        #sendButton {
+            padding: 12px 24px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        #sendButton:hover {
+            background: #4338ca;
+        }
+
+        .settings {
+            padding: 20px 30px;
+            background: #f1f5f9;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .api-key-section {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .api-key-section label {
+            font-weight: 600;
+            color: #374151;
+            min-width: 120px;
+        }
+
+        #apiKey {
+            flex: 1;
+            min-width: 250px;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+
+        #apiKey:focus {
+            outline: none;
+            border-color: #4f46e5;
+        }
+
+        #saveKey {
+            padding: 12px 24px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        #saveKey:hover {
+            background: #4338ca;
+        }
+
+        .audio-player {
+            margin-top: 10px;
+        }
+
+        .audio-player audio {
+            width: 100%;
+            height: 30px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+            
+            header {
+                padding: 20px;
+            }
+            
+            header h1 {
+                font-size: 2rem;
+            }
+            
+            .chat-container {
+                height: 350px;
+                padding: 15px;
+            }
+            
+            .controls {
+                padding: 20px;
+            }
+            
+            .control-buttons {
+                gap: 15px;
+            }
+            
+            .mic-button, .text-button {
+                width: 80px;
+                height: 80px;
+            }
+            
+            .button-icon {
+                font-size: 1.5rem;
+            }
+            
+            .settings {
+                padding: 15px;
+            }
+            
+            .api-key-section {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .api-key-section label {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎤 AI语音聊天助手</h1>
+            <p>基于Python Flask + 华佗GPT的实时语音对话</p>
+        </header>
+
+        <div class="chat-container">
+            <div id="conversation" class="conversation">
+                <div class="message ai-message">
+                    <span class="avatar">🤖</span>
+                    <div class="content">你好！我是Python版AI语音助手，支持语音和文字两种交互方式！</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-buttons">
+                <button id="micButton" class="mic-button" disabled>
+                    <span class="button-icon">🎤</span>
+                    <span class="button-text">语音输入</span>
+                </button>
+                <button id="textButton" class="text-button">
+                    <span class="button-icon">💬</span>
+                    <span class="button-text">文字输入</span>
+                </button>
+            </div>
+
+            <div class="text-input-section" id="textInputSection">
+                <div class="text-input">
+                    <input type="text" id="messageInput" placeholder="输入你的消息...">
+                    <button id="sendButton">发送</button>
+                </div>
+            </div>
+
+            <div class="status" id="status">正在连接服务器...</div>
+        </div>
+
+        <div class="settings">
+            <div class="api-key-section">
+                <label for="apiKey">华佗GPT API Key:</label>
+                <input type="password" id="apiKey" placeholder="输入你的华佗GPT API Key">
+                <button id="saveKey">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        class PythonVoiceChatApp {
+            constructor() {
+                this.socket = null;
+                this.mediaRecorder = null;
+                this.audioChunks = [];
+                this.isRecording = false;
+                this.isTextMode = false;
+                
+                this.initElements();
+                this.initSocket();
+                this.bindEvents();
+                this.loadApiKey();
+            }
+
+            initElements() {
+                this.micButton = document.getElementById('micButton');
+                this.textButton = document.getElementById('textButton');
+                this.status = document.getElementById('status');
+                this.conversation = document.getElementById('conversation');
+                this.apiKeyInput = document.getElementById('apiKey');
+                this.saveKeyButton = document.getElementById('saveKey');
+                this.textInputSection = document.getElementById('textInputSection');
+                this.messageInput = document.getElementById('messageInput');
+                this.sendButton = document.getElementById('sendButton');
+            }
+
+            initSocket() {
+                this.socket = io();
+                
+                this.socket.on('connect', () => {
+                    this.updateStatus('连接成功，准备开始对话');
+                    this.micButton.disabled = false;
+                });
+
+                this.socket.on('disconnect', () => {
+                    this.updateStatus('连接断开');
+                    this.micButton.disabled = true;
+                });
+
+                this.socket.on('status', (data) => {
+                    this.updateStatus(data.message, 'processing');
+                });
+
+                this.socket.on('user_message', (data) => {
+                    this.addMessage('user', data.text);
+                });
+
+                this.socket.on('ai_message', (data) => {
+                    this.addMessage('ai', data.text);
+                });
+
+                this.socket.on('ai_audio', (data) => {
+                    this.playAudio(data.audio_url);
+                });
+
+                this.socket.on('error', (data) => {
+                    this.updateStatus(data.message);
+                    this.resetRecording();
+                });
+            }
+
+            bindEvents() {
+                this.micButton.addEventListener('click', () => {
+                    if (this.isRecording) {
+                        this.stopRecording();
+                    } else {
+                        this.startRecording();
+                    }
+                });
+
+                this.textButton.addEventListener('click', () => {
+                    this.toggleTextMode();
+                });
+
+                this.saveKeyButton.addEventListener('click', () => {
+                    this.saveApiKey();
+                });
+
+                this.apiKeyInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.saveApiKey();
+                    }
+                });
+
+                this.sendButton.addEventListener('click', () => {
+                    this.sendTextMessage();
+                });
+
+                this.messageInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.sendTextMessage();
+                    }
+                });
+            }
+
+            loadApiKey() {
+                const savedKey = localStorage.getItem('huatuo_api_key');
+                if (savedKey) {
+                    this.apiKeyInput.value = savedKey;
+                    this.saveApiKey();
+                }
+            }
+
+            saveApiKey() {
+                const key = this.apiKeyInput.value.trim();
+                if (key) {
+                    localStorage.setItem('huatuo_api_key', key);
+                    
+                    fetch('/set_api_key', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({api_key: key})
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        this.updateStatus(data.message);
+                        setTimeout(() => {
+                            this.updateStatus('准备开始对话');
+                        }, 2000);
+                    })
+                    .catch(error => {
+                        this.updateStatus('保存API Key失败');
+                    });
+                }
+            }
+
+            toggleTextMode() {
+                this.isTextMode = !this.isTextMode;
+                if (this.isTextMode) {
+                    this.textInputSection.classList.add('active');
+                    this.textButton.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+                    this.messageInput.focus();
+                } else {
+                    this.textInputSection.classList.remove('active');
+                    this.textButton.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)';
+                }
+            }
+
+            async startRecording() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    this.mediaRecorder = new MediaRecorder(stream);
+                    this.audioChunks = [];
+
+                    this.mediaRecorder.ondataavailable = (event) => {
+                        this.audioChunks.push(event.data);
+                    };
+
+                    this.mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(this.audioChunks, { type: 'audio/wav' });
+                        this.sendAudioData(audioBlob);
+                    };
+
+                    this.mediaRecorder.start();
+                    this.isRecording = true;
+                    this.updateMicButton(true);
+                    this.updateStatus('正在录音...', 'listening');
+
+                } catch (error) {
+                    this.updateStatus('无法访问麦克风');
+                    console.error('录音错误:', error);
+                }
+            }
+
+            stopRecording() {
+                if (this.mediaRecorder && this.isRecording) {
+                    this.mediaRecorder.stop();
+                    this.mediaRecorder.stream.getTracks().forEach(track => track.stop());
+                    this.resetRecording();
+                }
+            }
+
+            resetRecording() {
+                this.isRecording = false;
+                this.updateMicButton(false);
+            }
+
+            sendAudioData(audioBlob) {
+                const reader = new FileReader();
+                reader.onload = () => {
+                    const arrayBuffer = reader.result;
+                    const base64Audio = btoa(String.fromCharCode.apply(null, new Uint8Array(arrayBuffer)));
+                    
+                    this.socket.emit('audio_data', {
+                        audio: base64Audio
+                    });
+                };
+                reader.readAsArrayBuffer(audioBlob);
+            }
+
+            sendTextMessage() {
+                const message = this.messageInput.value.trim();
+                if (message) {
+                    this.socket.emit('text_message', {
+                        message: message
+                    });
+                    this.messageInput.value = '';
+                }
+            }
+
+            updateMicButton(isRecording) {
+                if (isRecording) {
+                    this.micButton.classList.add('recording');
+                    this.micButton.querySelector('.button-icon').textContent = '⏹️';
+                    this.micButton.querySelector('.button-text').textContent = '停止录音';
+                } else {
+                    this.micButton.classList.remove('recording');
+                    this.micButton.querySelector('.button-icon').textContent = '🎤';
+                    this.micButton.querySelector('.button-text').textContent = '语音输入';
+                }
+            }
+
+            updateStatus(message, className = '') {
+                this.status.textContent = message;
+                this.status.className = `status ${className}`;
+            }
+
+            addMessage(type, content) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${type}-message`;
+                
+                const avatar = document.createElement('span');
+                avatar.className = 'avatar';
+                avatar.textContent = type === 'user' ? '👤' : '🤖';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'content';
+                contentDiv.textContent = content;
+                
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(contentDiv);
+                
+                this.conversation.appendChild(messageDiv);
+                this.scrollToBottom();
+            }
+
+            playAudio(audioUrl) {
+                const audioPlayer = document.createElement('div');
+                audioPlayer.className = 'audio-player';
+                audioPlayer.innerHTML = `<audio controls autoplay><source src="${audioUrl}" type="audio/wav"></audio>`;
+                
+                const lastMessage = this.conversation.lastElementChild;
+                if (lastMessage && lastMessage.classList.contains('ai-message')) {
+                    lastMessage.appendChild(audioPlayer);
+                }
+            }
+
+            scrollToBottom() {
+                const chatContainer = this.conversation.parentElement;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+
+        // 初始化应用
+        document.addEventListener('DOMContentLoaded', () => {
+            new PythonVoiceChatApp();
+        });
+    </script>
+</body>
+</html>
