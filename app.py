@@ -52,22 +52,34 @@ class ScenarioState:
             self.scenario_log = []
 
 class MultiCharacterEngine:
-    """多角色对话引擎"""
+    """多角色对话引擎 - 12人标准局狼人杀"""
     
     def __init__(self):
-        # 狼人杀角色配置
+        # 狼人杀12人标准局角色配置 (4狼人 + 4神职 + 4平民)
         self.werewolf_roles = {
-            "村民": {"team": "village", "description": "普通村民，白天参与投票"},
-            "狼人": {"team": "werewolf", "description": "夜晚杀人，白天伪装"},
-            "预言家": {"team": "village", "description": "夜晚可以查验一人身份"},
-            "女巫": {"team": "village", "description": "拥有毒药和解药各一瓶"},
-            "猎人": {"team": "village", "description": "被淘汰时可以开枪带走一人"}
+            "狼人": {"team": "werewolf", "description": "狼人阵营，夜晚杀人，白天伪装", "count": 4},
+            "预言家": {"team": "good", "description": "神职，夜晚查验身份", "count": 1},
+            "女巫": {"team": "good", "description": "神职，拥有解药和毒药各一瓶", "count": 1},
+            "猎人": {"team": "good", "description": "神职，被狼杀或投票出局可开枪", "count": 1},
+            "白痴": {"team": "good", "description": "神职，被投票出局可翻牌免死", "count": 1},
+            "平民": {"team": "good", "description": "好人阵营，无特殊技能", "count": 4}
+        }
+        
+        # 游戏阶段定义
+        self.game_phases = {
+            "first_night": "首夜",
+            "first_day": "第一天白天",
+            "sheriff_election": "警长竞选",
+            "day_discussion": "白天讨论",
+            "voting": "投票放逐", 
+            "night": "夜晚",
+            "game_end": "游戏结束"
         }
     
     def create_werewolf_scenario(self, session_id: str, character_ids: List[str]) -> bool:
-        """创建狼人杀场景"""
+        """创建12人标准局狼人杀场景"""
         
-        if len(character_ids) < 4 or len(character_ids) > 8:
+        if len(character_ids) != 12:
             return False
         
         # 获取角色信息
@@ -76,47 +88,69 @@ class MultiCharacterEngine:
             char = character_manager.get_character(char_id)
             if not char:
                 return False
-            
-            # 分配狼人杀角色
-            werewolf_role = self._assign_single_werewolf_role(len(character_ids), len(players))
-            
+                
             player = GamePlayer(
                 character_id=char.character_id,
                 character_name=char.name,
                 character_avatar=char.avatar,
-                role=werewolf_role
+                role=""  # 待分配
             )
             players.append(player)
         
-        # 随机打乱角色分配
-        werewolf_roles = [p.role for p in players]
-        random.shuffle(werewolf_roles)
+        # 12人标准局角色分配
+        standard_roles = (
+            ["狼人"] * 4 +
+            ["预言家"] * 1 +
+            ["女巫"] * 1 +
+            ["猎人"] * 1 +
+            ["白痴"] * 1 +
+            ["平民"] * 4
+        )
+        
+        # 随机分配角色
+        random.shuffle(standard_roles)
         for i, player in enumerate(players):
-            player.role = werewolf_roles[i]
+            player.role = standard_roles[i]
         
         # 创建场景状态
         scenario = ScenarioState(
             scenario_type="werewolf",
-            phase="day_discussion",
+            phase="first_night",
             players=players
         )
+        
+        # 初始化游戏状态
+        scenario.game_state = {
+            "sheriff": None,  # 警长
+            "sheriff_candidates": [],  # 警长候选人
+            "night_actions": {},  # 夜晚行动记录
+            "witch_potions": {"antidote": True, "poison": True},  # 女巫药剂状态
+            "killed_tonight": None,  # 今晚被杀的人
+            "saved_tonight": None,  # 今晚被救的人
+            "poisoned_tonight": None,  # 今晚被毒的人
+            "seer_checks": [],  # 预言家查验记录
+            "hunter_can_shoot": True,  # 猎人是否能开枪
+            "idiot_revealed": False  # 白痴是否已翻牌
+        }
         
         multi_scenarios[session_id] = scenario
         return True
     
-    def _assign_single_werewolf_role(self, total_players: int, current_index: int) -> str:
-        """为单个玩家分配狼人杀角色"""
+    def get_players_by_role(self, session_id: str, role: str) -> List[GamePlayer]:
+        """获取指定角色的玩家列表"""
+        if session_id not in multi_scenarios:
+            return []
         
-        role_configs = {
-            4: ["村民", "村民", "狼人", "预言家"],
-            5: ["村民", "村民", "村民", "狼人", "预言家"],
-            6: ["村民", "村民", "村民", "狼人", "狼人", "预言家"],
-            7: ["村民", "村民", "村民", "狼人", "狼人", "预言家", "女巫"],
-            8: ["村民", "村民", "村民", "狼人", "狼人", "预言家", "女巫", "猎人"]
-        }
+        scenario = multi_scenarios[session_id]
+        return [p for p in scenario.players if p.role == role and p.is_alive]
+    
+    def get_alive_players(self, session_id: str) -> List[GamePlayer]:
+        """获取存活玩家列表"""
+        if session_id not in multi_scenarios:
+            return []
         
-        roles = role_configs.get(total_players, role_configs[4])
-        return roles[current_index % len(roles)]
+        scenario = multi_scenarios[session_id]
+        return [p for p in scenario.players if p.is_alive]
     
     def get_next_speaker(self, session_id: str) -> Optional[GamePlayer]:
         """获取下一个发言的玩家"""
@@ -125,20 +159,40 @@ class MultiCharacterEngine:
             return None
         
         scenario = multi_scenarios[session_id]
-        alive_players = [p for p in scenario.players if p.is_alive]
+        alive_players = self.get_alive_players(session_id)
         
         if not alive_players:
             return None
         
         # 根据当前阶段决定发言顺序
-        if scenario.phase == "day_discussion":
+        if scenario.phase == "sheriff_election":
+            # 警长竞选阶段：候选人发言
+            candidates = scenario.game_state.get("sheriff_candidates", [])
+            spoken_candidates = len([log for log in scenario.scenario_log 
+                                   if log.get('phase') == 'sheriff_election' 
+                                   and log.get('round') == scenario.round_count])
+            if spoken_candidates < len(candidates):
+                candidate_id = candidates[spoken_candidates]
+                return next((p for p in alive_players if p.character_id == candidate_id), None)
+        
+        elif scenario.phase == "day_discussion":
             # 白天讨论：按顺序发言
             current_round = len([log for log in scenario.scenario_log 
                                if log.get('phase') == 'day_discussion' 
                                and log.get('round') == scenario.round_count])
             
             if current_round < len(alive_players):
-                return alive_players[current_round]
+                # 警长先发言，然后按位置顺序
+                sheriff_id = scenario.game_state.get("sheriff")
+                if sheriff_id and current_round == 0:
+                    sheriff = next((p for p in alive_players if p.character_id == sheriff_id), None)
+                    if sheriff:
+                        return sheriff
+                
+                # 其他玩家按顺序发言
+                non_sheriff_players = [p for p in alive_players if p.character_id != sheriff_id]
+                if current_round - (1 if sheriff_id else 0) < len(non_sheriff_players):
+                    return non_sheriff_players[current_round - (1 if sheriff_id else 0)]
         
         return None
     
@@ -154,7 +208,7 @@ class MultiCharacterEngine:
             return None  # 等待用户输入
         
         # 自动生成AI回复
-        prompt = self._build_scenario_prompt(player, scenario)
+        prompt = self._build_scenario_prompt(player, scenario, session_id)
         
         try:
             # 使用现有的chatbot获取AI回复
@@ -175,52 +229,134 @@ class MultiCharacterEngine:
         except Exception as e:
             return f"AI回复出错: {str(e)}"
     
-    def _build_scenario_prompt(self, player: GamePlayer, scenario: ScenarioState) -> str:
+    def _build_scenario_prompt(self, player: GamePlayer, scenario: ScenarioState, session_id: str = None) -> str:
         """构建场景提示词"""
         
         if scenario.scenario_type == "werewolf":
-            return self._build_werewolf_prompt(player, scenario)
+            return self._build_werewolf_prompt(player, scenario, session_id)
         
         return "请发言。"
     
-    def _build_werewolf_prompt(self, player: GamePlayer, scenario: ScenarioState) -> str:
+    def _build_werewolf_prompt(self, player: GamePlayer, scenario: ScenarioState, session_id: str = None) -> str:
         """构建狼人杀提示词"""
         
-        alive_players = [p for p in scenario.players if p.is_alive]
-        alive_names = [p.character_name for p in alive_players]
+        if not session_id:
+            # 从scenario中获取session_id，如果没有则使用第一个scenario的key
+            session_id = next(iter(multi_scenarios.keys())) if multi_scenarios else ''
         
-        if scenario.phase == "day_discussion":
-            prompt = f"""你正在参与一场狼人杀游戏。
+        alive_players = self.get_alive_players(session_id)
+        alive_names = [p.character_name for p in alive_players]
+        werewolves = self.get_players_by_role(session_id, "狼人")
+        werewolf_names = [p.character_name for p in werewolves if p.character_id != player.character_id]
+        
+        base_info = f"""【狼人杀12人标准局】
+你的身份：{player.role}
+你的阵营：{self.werewolf_roles[player.role]['team']}
+存活玩家：{', '.join(alive_names)}
+已淘汰玩家：{', '.join(scenario.eliminated_players) if scenario.eliminated_players else '无'}
+"""
+        
+        # 狼人可以知道队友身份
+        if player.role == "狼人" and werewolf_names:
+            base_info += f"\n你的狼人队友：{', '.join(werewolf_names)}"
+        
+        if scenario.phase == "first_night":
+            if player.role == "狼人":
+                prompt = base_info + f"""\n\n【首夜-狼人行动】
+你们狼人需要选择击杀一名玩家。请与队友商量并选择目标。
+目标建议：优先击杀神职（预言家、女巫、猎人）。
 
-当前情况：
-- 游戏第{scenario.round_count}天的白天讨论阶段
-- 你的身份是：{player.role}
-- 你的队伍：{self.werewolf_roles[player.role]['team']}
-- 存活玩家：{', '.join(alive_names)}
-- 已淘汰玩家：{', '.join(scenario.eliminated_players) if scenario.eliminated_players else '无'}
+请回复：我们选择击杀【玩家姓名】。保持角色性格。"""
+            elif player.role == "预言家":
+                prompt = base_info + f"""\n\n【首夜-预言家查验】
+你可以查验一名玩家的身份（好人或狼人）。
+建议：选择一个你想重点关注的玩家。
 
-游戏规则：
-- 如果你是村民阵营，目标是找出所有狼人
-- 如果你是狼人，目标是伪装身份，误导村民
-- 白天所有人讨论，然后投票淘汰一人
+请回复：我查验【玩家姓名】。保持角色性格。"""
+            elif player.role == "女巫":
+                killed_player = scenario.game_state.get("killed_tonight")
+                prompt = base_info + f"""\n\n【首夜-女巫行动】
+今晚被狼人击杀的是：{killed_player or '暂未确定'}
+你有解药和毒药各一瓶。首夜你可以自救。
 
-请根据你的角色身份和当前局势，发表你的看法和推理。保持角色的性格特点，但要融入狼人杀的游戏思维。发言要简洁有力，不超过100字。"""
+选项：
+1. 使用解药救人（回复：我使用解药救【玩家姓名】）
+2. 使用毒药毒人（回复：我使用毒药毒【玩家姓名】）
+3. 不使用药剂（回复：我不使用药剂）
+
+注意：一晚只能使用一瓶药。保持角色性格。"""
+            else:
+                prompt = base_info + f"\n\n【首夜】\n你在首夜无特殊行动，请耐心等待白天到来。可以思考明天的策略。"
+        
+        elif scenario.phase == "sheriff_election":
+            prompt = base_info + f"""\n\n【警长竞选发言】
+你正在竞选警长。警长拥有1.5票的投票权和归票权。
+根据你的身份制定策略：
+- 如果你是神职：可以考虑跳出身份获得信任
+- 如果你是狼人：伪装身份，争取获得警长职位
+- 如果你是平民：展现逻辑能力，帮助好人
+
+请发表竞选演说，展现你的价值。发言限100字内。"""
+        
+        elif scenario.phase == "day_discussion":
+            prompt = base_info + f"""\n\n【第{scenario.round_count}天白天讨论】
+根据昨晚的情况和之前的信息进行分析推理：
+
+策略提示：
+- 神职：合理时机跳出身份，报告信息
+- 狼人：隐藏身份，误导好人，带节奏
+- 平民：分析信息，找出狼人
+
+请发表你的分析和看法。发言限120字内。"""
         
         elif scenario.phase == "voting":
             other_players = [p for p in alive_players if p.character_id != player.character_id]
-            prompt = f"""现在是投票阶段，你需要选择一个人投票淘汰。
+            prompt = base_info + f"""\n\n【投票放逐阶段】
+你需要投票放逐一名玩家。
+可投票对象：{', '.join([p.character_name for p in other_players])}
 
-你的身份：{player.role}
-可投票的玩家：{', '.join([p.character_name for p in other_players])}
+根据你的身份和讨论内容选择：
+- 好人：投票给最可疑的狼人
+- 狼人：投票给对你威胁最大的好人
 
-请根据刚才的讨论内容和你的角色身份，选择一个最可疑的人投票。
+回复格式：我投票给【玩家姓名】，理由是..."""
+        
+        elif scenario.phase == "night":
+            if player.role == "狼人":
+                prompt = base_info + f"""\n\n【夜晚-狼人击杀】
+选择今晚要击杀的玩家。建议优先击杀：
+1. 已确认的神职
+2. 逻辑能力强的好人
+3. 对你们有威胁的玩家
 
-回复格式：我投票给【玩家姓名】，理由是...
+请回复：我们击杀【玩家姓名】。"""
+            elif player.role == "预言家":
+                prompt = base_info + f"""\n\n【夜晚-预言家查验】
+选择要查验的玩家。建议查验：
+1. 发言可疑的玩家
+2. 需要确认身份的关键玩家
 
-保持你的角色性格，但要体现狼人杀的思维逻辑。"""
+请回复：我查验【玩家姓名】。"""
+            elif player.role == "女巫":
+                killed_player = scenario.game_state.get("killed_tonight")
+                has_antidote = scenario.game_state.get("witch_potions", {}).get("antidote", False)
+                has_poison = scenario.game_state.get("witch_potions", {}).get("poison", False)
+                
+                prompt = base_info + f"""\n\n【夜晚-女巫行动】
+今晚被击杀的玩家：{killed_player or '无人被杀'}
+你的药剂状态：解药{'可用' if has_antidote else '已用'}，毒药{'可用' if has_poison else '已用'}
+
+选项：
+1. 使用解药救人（如果有解药）
+2. 使用毒药毒人（如果有毒药）
+3. 不使用药剂
+
+请回复你的选择。"""
+            else:
+                prompt = base_info + f"\n\n【夜晚】\n你在夜晚无行动，请等待白天到来。"
         
         else:
-            prompt = "请发言。"
+            prompt = base_info + f"\n\n请根据当前阶段进行发言。"
         
         return prompt
     
@@ -240,18 +376,35 @@ class MultiCharacterEngine:
     def _advance_werewolf_phase(self, scenario: ScenarioState) -> bool:
         """推进狼人杀游戏阶段"""
         
-        if scenario.phase == "day_discussion":
+        if scenario.phase == "first_night":
+            # 首夜结束，进入第一天
+            scenario.phase = "first_day"
+            scenario.round_count = 1
+            return True
+            
+        elif scenario.phase == "first_day":
+            # 第一天进入警长竞选
+            scenario.phase = "sheriff_election"
+            return True
+            
+        elif scenario.phase == "sheriff_election":
+            # 警长竞选结束，进入白天讨论
+            scenario.phase = "day_discussion"
+            return True
+        
+        elif scenario.phase == "day_discussion":
+            # 白天讨论结束，进入投票
             scenario.phase = "voting"
             return True
         
         elif scenario.phase == "voting":
-            # 处理投票结果
+            # 投票结束，进入夜晚
             scenario.phase = "night"
             scenario.round_count += 1
             return True
         
         elif scenario.phase == "night":
-            # 夜晚结束，开始新一天
+            # 夜晚结束，开始新一天讨论
             scenario.phase = "day_discussion"
             return True
         
@@ -266,19 +419,368 @@ class MultiCharacterEngine:
         scenario = multi_scenarios[session_id]
         
         if scenario.scenario_type == "werewolf":
-            alive_players = [p for p in scenario.players if p.is_alive]
+            alive_players = self.get_alive_players(session_id)
             werewolves = [p for p in alive_players if p.role == "狼人"]
-            villagers = [p for p in alive_players if p.role != "狼人"]
+            good_players = [p for p in alive_players if p.role != "狼人"]
             
+            # 狼人全部出局，好人获胜
             if not werewolves:
                 scenario.is_active = False
-                return "村民阵营获胜！所有狼人已被淘汰。"
+                return "🎉 好人阵营获胜！所有狼人已被淘汰。"
             
-            if len(werewolves) >= len(villagers):
+            # 狼人数量达到或超过好人数量，狼人获胜
+            if len(werewolves) >= len(good_players):
                 scenario.is_active = False
-                return "狼人阵营获胜！狼人数量达到或超过村民数量。"
+                return "🐺 狼人阵营获胜！狼人数量达到或超过好人数量。"
+            
+            # 检查特殊胜利条件
+            # 如果所有神职都被淘汰
+            gods = [p for p in alive_players if p.role in ["预言家", "女巫", "猎人", "白痴"]]
+            if not gods and len(alive_players) > 0:
+                scenario.is_active = False
+                return "🐺 狼人阵营获胜！所有神职已被淘汰（屠神胜利）。"
+            
+            # 如果所有平民都被淘汰
+            civilians = [p for p in alive_players if p.role == "平民"]
+            if not civilians and len(alive_players) > 0 and len(werewolves) > 0:
+                scenario.is_active = False
+                return "🐺 狼人阵营获胜！所有平民已被淘汰（屠民胜利）。"
         
         return None
+    
+    def process_night_actions(self, session_id: str):
+        """处理夜晚技能行动"""
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        if scenario.phase != "night" and scenario.phase != "first_night":
+            return
+        
+        # 重置夜晚行动状态
+        scenario.game_state["killed_tonight"] = None
+        scenario.game_state["saved_tonight"] = None
+        scenario.game_state["poisoned_tonight"] = None
+        
+        # 1. 狼人击杀行动
+        self._process_werewolf_kill(session_id)
+        
+        # 2. 预言家查验行动
+        self._process_seer_check(session_id)
+        
+        # 3. 女巫行动
+        self._process_witch_action(session_id)
+        
+        # 处理死亡
+        self._process_deaths(session_id)
+    
+    def _process_werewolf_kill(self, session_id: str):
+        """处理狼人击杀"""
+        scenario = multi_scenarios[session_id]
+        werewolves = self.get_players_by_role(session_id, "狼人")
+        
+        if not werewolves:
+            return
+        
+        # 获取可击杀的目标（非狼人）
+        good_players = [p for p in self.get_alive_players(session_id) if p.role != "狼人"]
+        
+        if not good_players:
+            return
+        
+        # 狼人的智能击杀策略
+        target = self._choose_werewolf_target(good_players, scenario)
+        scenario.game_state["killed_tonight"] = target.character_name
+        
+        # 记录狼人行动
+        scenario.scenario_log.append({
+            "phase": "werewolf_kill",
+            "round": scenario.round_count,
+            "action": f"狼人选择击杀{target.character_name}",
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def _choose_werewolf_target(self, good_players: List[GamePlayer], scenario: ScenarioState) -> GamePlayer:
+        """狼人智能选择击杀目标"""
+        # 优先级：已知神职 > 可疑神职 > 强势玩家 > 随机
+        
+        # 1. 如果有已确认的神职，优先击杀
+        confirmed_gods = []
+        for player in good_players:
+            if player.role in ["预言家", "女巫", "猎人", "白痴"]:
+                # 模拟：如果这个神职在之前的游戏中暴露了身份
+                if random.random() < 0.3:  # 30%概率被狼人识破
+                    confirmed_gods.append(player)
+        
+        if confirmed_gods:
+            return random.choice(confirmed_gods)
+        
+        # 2. 避免击杀白痴（除非是最后的神职）
+        non_idiot_players = [p for p in good_players if p.role != "白痴"]
+        if non_idiot_players and len(good_players) > 2:
+            good_players = non_idiot_players
+        
+        # 3. 随机选择
+        return random.choice(good_players)
+    
+    def _process_seer_check(self, session_id: str):
+        """处理预言家查验"""
+        scenario = multi_scenarios[session_id]
+        seers = self.get_players_by_role(session_id, "预言家")
+        
+        if not seers:
+            return
+        
+        seer = seers[0]
+        alive_players = self.get_alive_players(session_id)
+        other_players = [p for p in alive_players if p.character_id != seer.character_id]
+        
+        if not other_players:
+            return
+        
+        # 预言家智能查验策略
+        target = self._choose_seer_target(other_players, scenario)
+        result = "狼人" if target.role == "狼人" else "好人"
+        
+        scenario.game_state["seer_checks"].append({
+            "target": target.character_name,
+            "result": result,
+            "night": scenario.round_count
+        })
+        
+        # 记录预言家行动
+        scenario.scenario_log.append({
+            "phase": "seer_check",
+            "round": scenario.round_count,
+            "action": f"预言家查验{target.character_name}，结果是{result}",
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def _choose_seer_target(self, other_players: List[GamePlayer], scenario: ScenarioState) -> GamePlayer:
+        """预言家智能选择查验目标"""
+        # 已查验过的玩家
+        checked_names = [check["target"] for check in scenario.game_state.get("seer_checks", [])]
+        unchecked_players = [p for p in other_players if p.character_name not in checked_names]
+        
+        if unchecked_players:
+            # 优先查验未检查过的玩家
+            return random.choice(unchecked_players)
+        else:
+            # 如果都检查过了，随机选择
+            return random.choice(other_players)
+    
+    def _process_witch_action(self, session_id: str):
+        """处理女巫行动"""
+        scenario = multi_scenarios[session_id]
+        witches = self.get_players_by_role(session_id, "女巫")
+        
+        if not witches:
+            return
+        
+        witch = witches[0]
+        killed_player = scenario.game_state.get("killed_tonight")
+        has_antidote = scenario.game_state.get("witch_potions", {}).get("antidote", False)
+        has_poison = scenario.game_state.get("witch_potions", {}).get("poison", False)
+        
+        # 女巫智能决策
+        if killed_player and has_antidote:
+            # 救人策略
+            if self._should_witch_save(killed_player, scenario, session_id):
+                scenario.game_state["saved_tonight"] = killed_player
+                scenario.game_state["witch_potions"]["antidote"] = False
+                
+                scenario.scenario_log.append({
+                    "phase": "witch_save",
+                    "round": scenario.round_count,
+                    "action": f"女巫使用解药救了{killed_player}",
+                    "timestamp": datetime.now().isoformat()
+                })
+        
+        # 毒人策略（如果没有救人且有毒药）
+        if has_poison and scenario.game_state.get("saved_tonight") != killed_player:
+            poison_target = self._choose_poison_target(session_id, scenario)
+            if poison_target:
+                scenario.game_state["poisoned_tonight"] = poison_target.character_name
+                scenario.game_state["witch_potions"]["poison"] = False
+                
+                scenario.scenario_log.append({
+                    "phase": "witch_poison",
+                    "round": scenario.round_count,
+                    "action": f"女巫使用毒药毒了{poison_target.character_name}",
+                    "timestamp": datetime.now().isoformat()
+                })
+    
+    def _should_witch_save(self, killed_player: str, scenario: ScenarioState, session_id: str) -> bool:
+        """女巫是否应该救人"""
+        # 首夜一般会救人
+        if scenario.phase == "first_night":
+            return random.random() < 0.7  # 70%概率救人
+        
+        # 后续夜晚根据情况决定
+        # 如果被杀的是重要角色，更倾向于救
+        killed_player_obj = next((p for p in scenario.players if p.character_name == killed_player), None)
+        if killed_player_obj and killed_player_obj.role in ["预言家", "猎人"]:
+            return random.random() < 0.8  # 80%概率救重要角色
+        
+        return random.random() < 0.4  # 40%概率救普通玩家
+    
+    def _choose_poison_target(self, session_id: str, scenario: ScenarioState) -> Optional[GamePlayer]:
+        """选择毒杀目标"""
+        alive_players = self.get_alive_players(session_id)
+        werewolves = [p for p in alive_players if p.role == "狼人"]
+        
+        # 如果确定知道狼人身份，毒狼人
+        if werewolves and random.random() < 0.6:  # 60%概率能识别出狼人
+            return random.choice(werewolves)
+        
+        # 否则可能不用毒药或毒错人
+        if random.random() < 0.3:  # 30%概率使用毒药
+            # 排除自己和已经被杀的人
+            witch = self.get_players_by_role(session_id, "女巫")[0]
+            killed_tonight = scenario.game_state.get("killed_tonight")
+            
+            possible_targets = [p for p in alive_players 
+                              if p.character_id != witch.character_id 
+                              and p.character_name != killed_tonight]
+            
+            if possible_targets:
+                return random.choice(possible_targets)
+        
+        return None
+    
+    def _process_deaths(self, session_id: str):
+        """处理死亡结算"""
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        killed = scenario.game_state.get("killed_tonight")
+        saved = scenario.game_state.get("saved_tonight")
+        poisoned = scenario.game_state.get("poisoned_tonight")
+        
+        deaths = []
+        
+        # 处理击杀（如果未被救）
+        if killed and killed != saved:
+            player = next((p for p in scenario.players if p.character_name == killed), None)
+            if player and player.is_alive:
+                player.is_alive = False
+                scenario.eliminated_players.append(killed)
+                deaths.append(f"{killed}被狼人击杀")
+        
+        # 处理毒杀
+        if poisoned:
+            player = next((p for p in scenario.players if p.character_name == poisoned), None)
+            if player and player.is_alive:
+                player.is_alive = False
+                scenario.eliminated_players.append(poisoned)
+                deaths.append(f"{poisoned}被女巫毒杀")
+        
+        # 记录死亡信息到日志
+        if deaths:
+            scenario.scenario_log.append({
+                "phase": "night_result",
+                "round": scenario.round_count,
+                "deaths": deaths,
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    def handle_sheriff_election(self, session_id: str):
+        """处理警长竞选"""
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        alive_players = self.get_alive_players(session_id)
+        
+        # 随机选择2-4个候选人
+        candidate_count = min(random.randint(2, 4), len(alive_players))
+        candidates = random.sample(alive_players, candidate_count)
+        scenario.game_state["sheriff_candidates"] = [c.character_id for c in candidates]
+        
+        # 记录竞选开始
+        scenario.scenario_log.append({
+            "phase": "sheriff_election_start",
+            "round": scenario.round_count,
+            "candidates": [c.character_name for c in candidates],
+            "timestamp": datetime.now().isoformat()
+        })
+    
+    def vote_for_sheriff(self, session_id: str):
+        """警长投票"""
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        candidates = scenario.game_state.get("sheriff_candidates", [])
+        alive_players = self.get_alive_players(session_id)
+        non_candidates = [p for p in alive_players if p.character_id not in candidates]
+        
+        # 简化投票：随机选择警长
+        if candidates:
+            sheriff_id = random.choice(candidates)
+            scenario.game_state["sheriff"] = sheriff_id
+            sheriff = next((p for p in alive_players if p.character_id == sheriff_id), None)
+            
+            scenario.scenario_log.append({
+                "phase": "sheriff_elected",
+                "round": scenario.round_count,
+                "sheriff": sheriff.character_name if sheriff else "未知",
+                "timestamp": datetime.now().isoformat()
+            })
+    
+    def handle_voting_phase(self, session_id: str):
+        """处理投票放逐阶段"""
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        alive_players = self.get_alive_players(session_id)
+        
+        # 简化投票：随机选择被放逐者
+        if alive_players:
+            eliminated = random.choice(alive_players)
+            eliminated.is_alive = False
+            scenario.eliminated_players.append(eliminated.character_name)
+            
+            # 检查猎人技能
+            if eliminated.role == "猎人" and scenario.game_state.get("hunter_can_shoot", True):
+                # 猎人开枪带走一人
+                other_alive = [p for p in self.get_alive_players(session_id) if p.character_id != eliminated.character_id]
+                if other_alive:
+                    shot_target = random.choice(other_alive)
+                    shot_target.is_alive = False
+                    scenario.eliminated_players.append(shot_target.character_name)
+                    
+                    scenario.scenario_log.append({
+                        "phase": "hunter_shoot",
+                        "round": scenario.round_count,
+                        "hunter": eliminated.character_name,
+                        "target": shot_target.character_name,
+                        "timestamp": datetime.now().isoformat()
+                    })
+            
+            # 检查白痴技能
+            elif eliminated.role == "白痴" and not scenario.game_state.get("idiot_revealed", False):
+                # 白痴翻牌免死但失去投票权
+                eliminated.is_alive = True
+                scenario.eliminated_players.remove(eliminated.character_name)
+                scenario.game_state["idiot_revealed"] = True
+                
+                scenario.scenario_log.append({
+                    "phase": "idiot_reveal",
+                    "round": scenario.round_count,
+                    "idiot": eliminated.character_name,
+                    "timestamp": datetime.now().isoformat()
+                })
+            
+            scenario.scenario_log.append({
+                "phase": "voting_result",
+                "round": scenario.round_count,
+                "eliminated": eliminated.character_name,
+                "role": eliminated.role,
+                "timestamp": datetime.now().isoformat()
+            })
 
 # 创建多角色引擎实例
 multi_engine = MultiCharacterEngine()
