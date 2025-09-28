@@ -10,13 +10,278 @@ import urllib3
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import time
+import random
 from typing import Dict, List, Any, Optional
+from dataclasses import dataclass, asdict
 
 # 导入角色系统
 from character_system import (
     CharacterManager, ConversationMemory, CharacterConsistencyManager,
     CharacterCreationWizard, CharacterProfile
 )
+
+# 评估系统已移至独立的命令行工具 cli_evaluation.py
+
+@dataclass
+class GamePlayer:
+    """游戏玩家"""
+    character_id: str
+    character_name: str
+    character_avatar: str
+    role: str  # 游戏中的角色（如：村民、狼人、预言家等）
+    is_alive: bool = True
+    vote_target: Optional[str] = None
+    
+@dataclass
+class ScenarioState:
+    """多角色场景状态"""
+    scenario_type: str  # 场景类型（werewolf, debate, etc.）
+    phase: str  # 当前阶段
+    round_count: int = 1
+    players: List[GamePlayer] = None
+    eliminated_players: List[str] = None
+    scenario_log: List[Dict] = None
+    is_active: bool = True
+    
+    def __post_init__(self):
+        if self.players is None:
+            self.players = []
+        if self.eliminated_players is None:
+            self.eliminated_players = []
+        if self.scenario_log is None:
+            self.scenario_log = []
+
+class MultiCharacterEngine:
+    """多角色对话引擎"""
+    
+    def __init__(self):
+        # 狼人杀角色配置
+        self.werewolf_roles = {
+            "村民": {"team": "village", "description": "普通村民，白天参与投票"},
+            "狼人": {"team": "werewolf", "description": "夜晚杀人，白天伪装"},
+            "预言家": {"team": "village", "description": "夜晚可以查验一人身份"},
+            "女巫": {"team": "village", "description": "拥有毒药和解药各一瓶"},
+            "猎人": {"team": "village", "description": "被淘汰时可以开枪带走一人"}
+        }
+    
+    def create_werewolf_scenario(self, session_id: str, character_ids: List[str]) -> bool:
+        """创建狼人杀场景"""
+        
+        if len(character_ids) < 4 or len(character_ids) > 8:
+            return False
+        
+        # 获取角色信息
+        players = []
+        for char_id in character_ids:
+            char = character_manager.get_character(char_id)
+            if not char:
+                return False
+            
+            # 分配狼人杀角色
+            werewolf_role = self._assign_single_werewolf_role(len(character_ids), len(players))
+            
+            player = GamePlayer(
+                character_id=char.character_id,
+                character_name=char.name,
+                character_avatar=char.avatar,
+                role=werewolf_role
+            )
+            players.append(player)
+        
+        # 随机打乱角色分配
+        werewolf_roles = [p.role for p in players]
+        random.shuffle(werewolf_roles)
+        for i, player in enumerate(players):
+            player.role = werewolf_roles[i]
+        
+        # 创建场景状态
+        scenario = ScenarioState(
+            scenario_type="werewolf",
+            phase="day_discussion",
+            players=players
+        )
+        
+        multi_scenarios[session_id] = scenario
+        return True
+    
+    def _assign_single_werewolf_role(self, total_players: int, current_index: int) -> str:
+        """为单个玩家分配狼人杀角色"""
+        
+        role_configs = {
+            4: ["村民", "村民", "狼人", "预言家"],
+            5: ["村民", "村民", "村民", "狼人", "预言家"],
+            6: ["村民", "村民", "村民", "狼人", "狼人", "预言家"],
+            7: ["村民", "村民", "村民", "狼人", "狼人", "预言家", "女巫"],
+            8: ["村民", "村民", "村民", "狼人", "狼人", "预言家", "女巫", "猎人"]
+        }
+        
+        roles = role_configs.get(total_players, role_configs[4])
+        return roles[current_index % len(roles)]
+    
+    def get_next_speaker(self, session_id: str) -> Optional[GamePlayer]:
+        """获取下一个发言的玩家"""
+        
+        if session_id not in multi_scenarios:
+            return None
+        
+        scenario = multi_scenarios[session_id]
+        alive_players = [p for p in scenario.players if p.is_alive]
+        
+        if not alive_players:
+            return None
+        
+        # 根据当前阶段决定发言顺序
+        if scenario.phase == "day_discussion":
+            # 白天讨论：按顺序发言
+            current_round = len([log for log in scenario.scenario_log 
+                               if log.get('phase') == 'day_discussion' 
+                               and log.get('round') == scenario.round_count])
+            
+            if current_round < len(alive_players):
+                return alive_players[current_round]
+        
+        return None
+    
+    def process_player_message(self, session_id: str, player: GamePlayer, auto_generate: bool = True) -> Optional[str]:
+        """处理玩家消息（自动生成或用户输入）"""
+        
+        if session_id not in multi_scenarios:
+            return None
+        
+        scenario = multi_scenarios[session_id]
+        
+        if not auto_generate:
+            return None  # 等待用户输入
+        
+        # 自动生成AI回复
+        prompt = self._build_scenario_prompt(player, scenario)
+        
+        try:
+            # 使用现有的chatbot获取AI回复
+            response = chatbot.get_ai_response(prompt, session_id)
+            
+            # 记录到场景日志
+            scenario.scenario_log.append({
+                "phase": scenario.phase,
+                "round": scenario.round_count,
+                "player": player.character_name,
+                "role": player.role,
+                "message": response,
+                "timestamp": datetime.now().isoformat()
+            })
+            
+            return response
+            
+        except Exception as e:
+            return f"AI回复出错: {str(e)}"
+    
+    def _build_scenario_prompt(self, player: GamePlayer, scenario: ScenarioState) -> str:
+        """构建场景提示词"""
+        
+        if scenario.scenario_type == "werewolf":
+            return self._build_werewolf_prompt(player, scenario)
+        
+        return "请发言。"
+    
+    def _build_werewolf_prompt(self, player: GamePlayer, scenario: ScenarioState) -> str:
+        """构建狼人杀提示词"""
+        
+        alive_players = [p for p in scenario.players if p.is_alive]
+        alive_names = [p.character_name for p in alive_players]
+        
+        if scenario.phase == "day_discussion":
+            prompt = f"""你正在参与一场狼人杀游戏。
+
+当前情况：
+- 游戏第{scenario.round_count}天的白天讨论阶段
+- 你的身份是：{player.role}
+- 你的队伍：{self.werewolf_roles[player.role]['team']}
+- 存活玩家：{', '.join(alive_names)}
+- 已淘汰玩家：{', '.join(scenario.eliminated_players) if scenario.eliminated_players else '无'}
+
+游戏规则：
+- 如果你是村民阵营，目标是找出所有狼人
+- 如果你是狼人，目标是伪装身份，误导村民
+- 白天所有人讨论，然后投票淘汰一人
+
+请根据你的角色身份和当前局势，发表你的看法和推理。保持角色的性格特点，但要融入狼人杀的游戏思维。发言要简洁有力，不超过100字。"""
+        
+        elif scenario.phase == "voting":
+            other_players = [p for p in alive_players if p.character_id != player.character_id]
+            prompt = f"""现在是投票阶段，你需要选择一个人投票淘汰。
+
+你的身份：{player.role}
+可投票的玩家：{', '.join([p.character_name for p in other_players])}
+
+请根据刚才的讨论内容和你的角色身份，选择一个最可疑的人投票。
+
+回复格式：我投票给【玩家姓名】，理由是...
+
+保持你的角色性格，但要体现狼人杀的思维逻辑。"""
+        
+        else:
+            prompt = "请发言。"
+        
+        return prompt
+    
+    def advance_phase(self, session_id: str) -> bool:
+        """推进游戏阶段"""
+        
+        if session_id not in multi_scenarios:
+            return False
+        
+        scenario = multi_scenarios[session_id]
+        
+        if scenario.scenario_type == "werewolf":
+            return self._advance_werewolf_phase(scenario)
+        
+        return False
+    
+    def _advance_werewolf_phase(self, scenario: ScenarioState) -> bool:
+        """推进狼人杀游戏阶段"""
+        
+        if scenario.phase == "day_discussion":
+            scenario.phase = "voting"
+            return True
+        
+        elif scenario.phase == "voting":
+            # 处理投票结果
+            scenario.phase = "night"
+            scenario.round_count += 1
+            return True
+        
+        elif scenario.phase == "night":
+            # 夜晚结束，开始新一天
+            scenario.phase = "day_discussion"
+            return True
+        
+        return False
+    
+    def check_game_end(self, session_id: str) -> Optional[str]:
+        """检查游戏是否结束"""
+        
+        if session_id not in multi_scenarios:
+            return None
+        
+        scenario = multi_scenarios[session_id]
+        
+        if scenario.scenario_type == "werewolf":
+            alive_players = [p for p in scenario.players if p.is_alive]
+            werewolves = [p for p in alive_players if p.role == "狼人"]
+            villagers = [p for p in alive_players if p.role != "狼人"]
+            
+            if not werewolves:
+                scenario.is_active = False
+                return "村民阵营获胜！所有狼人已被淘汰。"
+            
+            if len(werewolves) >= len(villagers):
+                scenario.is_active = False
+                return "狼人阵营获胜！狼人数量达到或超过村民数量。"
+        
+        return None
+
+# 创建多角色引擎实例
+multi_engine = MultiCharacterEngine()
 
 # 禁用SSL警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -184,11 +449,15 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 # 全局变量
 conversations = {}
 tts_engine = None
+multi_scenarios = {}  # 多角色场景会话
 
 # 初始化角色系统（不使用Redis）
 character_manager = CharacterManager(redis_url=None)
 memory_manager = ConversationMemory(redis_url=None)
 consistency_manager = CharacterConsistencyManager(character_manager, memory_manager)
+
+# 评估系统功能已移至独立的命令行工具，使用方法：
+# python cli_evaluation.py --help
 
 class VoiceChatBot:
     def __init__(self):
@@ -197,8 +466,8 @@ class VoiceChatBot:
         self.current_character_id = "rumeng"  # 默认角色
         try:
             self.microphone = sr.Microphone()
-        except OSError:
-            print("警告: 未检测到音频输入设备，语音功能将受限")
+        except (OSError, AttributeError) as e:
+            print(f"警告: 未检测到音频输入设备或缺少pyaudio模块，语音功能将受限: {e}")
             self.microphone = None
         self.setup_tts()
         
@@ -250,6 +519,9 @@ class VoiceChatBot:
             # 更新系统提示词
             if self.conversation_api:
                 self.conversation_api.system_prompt = character.to_system_prompt()
+                # 清空当前会话的对话历史，确保角色切换生效
+                if hasattr(self, '_current_session_id') and self._current_session_id:
+                    self.conversation_api.clear_conversation(self._current_session_id)
             return True
         return False
     
@@ -483,9 +755,21 @@ def set_current_character():
     try:
         data = request.json
         character_id = data.get('character_id')
+        session_id = data.get('session_id')  # 从前端传递session_id
         
+        # 设置当前会话ID
+        if session_id:
+            chatbot._current_session_id = session_id
+            
         if chatbot.set_character(character_id):
             character = character_manager.get_character(character_id)
+            
+            # 清空相关的对话历史
+            if session_id:
+                if session_id in conversations:
+                    conversations[session_id] = []
+                memory_manager.clear_history(session_id)
+            
             return jsonify({
                 "status": "success", 
                 "message": f"已切换到角色: {character.name}",
@@ -518,6 +802,141 @@ def clear_conversation_history(session_id):
         return jsonify({"status": "success", "message": "对话历史已清除"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)})
+
+# 多角色场景API
+@app.route('/api/scenario/create', methods=['POST'])
+def create_scenario():
+    """创建多角色场景"""
+    try:
+        data = request.json
+        scenario_type = data.get('scenario_type', 'werewolf')
+        character_ids = data.get('character_ids', [])
+        session_id = data.get('session_id', request.sid)
+        
+        if scenario_type == 'werewolf':
+            success = multi_engine.create_werewolf_scenario(session_id, character_ids)
+            if success:
+                scenario = multi_scenarios[session_id]
+                return jsonify({
+                    "status": "success",
+                    "message": "狼人杀场景创建成功",
+                    "scenario": {
+                        "type": scenario.scenario_type,
+                        "phase": scenario.phase,
+                        "players": [asdict(p) for p in scenario.players]
+                    }
+                })
+            else:
+                return jsonify({"status": "error", "message": "场景创建失败，请检查角色数量（4-8个）"})
+        
+        return jsonify({"status": "error", "message": "不支持的场景类型"})
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/scenario/status/<session_id>', methods=['GET'])
+def get_scenario_status(session_id):
+    """获取场景状态"""
+    try:
+        if session_id not in multi_scenarios:
+            return jsonify({"status": "error", "message": "场景不存在"})
+        
+        scenario = multi_scenarios[session_id]
+        
+        return jsonify({
+            "status": "success",
+            "scenario": {
+                "type": scenario.scenario_type,
+                "phase": scenario.phase,
+                "round": scenario.round_count,
+                "is_active": scenario.is_active,
+                "players": [asdict(p) for p in scenario.players],
+                "eliminated_players": scenario.eliminated_players,
+                "log_count": len(scenario.scenario_log)
+            }
+        })
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/scenario/next_speaker/<session_id>', methods=['GET'])
+def get_next_speaker(session_id):
+    """获取下一个发言者"""
+    try:
+        if session_id not in multi_scenarios:
+            return jsonify({"status": "error", "message": "场景不存在"})
+        
+        next_player = multi_engine.get_next_speaker(session_id)
+        
+        if next_player:
+            return jsonify({
+                "status": "success",
+                "next_speaker": asdict(next_player)
+            })
+        else:
+            return jsonify({
+                "status": "success", 
+                "next_speaker": None,
+                "message": "当前阶段无发言者"
+            })
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/scenario/advance/<session_id>', methods=['POST'])
+def advance_scenario_phase(session_id):
+    """推进场景阶段"""
+    try:
+        if session_id not in multi_scenarios:
+            return jsonify({"status": "error", "message": "场景不存在"})
+        
+        success = multi_engine.advance_phase(session_id)
+        
+        if success:
+            scenario = multi_scenarios[session_id]
+            
+            # 检查游戏是否结束
+            end_message = multi_engine.check_game_end(session_id)
+            
+            return jsonify({
+                "status": "success",
+                "message": "阶段推进成功",
+                "new_phase": scenario.phase,
+                "round": scenario.round_count,
+                "game_end": end_message is not None,
+                "end_message": end_message
+            })
+        else:
+            return jsonify({"status": "error", "message": "阶段推进失败"})
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/api/scenario/logs/<session_id>', methods=['GET'])
+def get_scenario_logs(session_id):
+    """获取场景日志"""
+    try:
+        if session_id not in multi_scenarios:
+            return jsonify({"status": "error", "message": "场景不存在"})
+        
+        scenario = multi_scenarios[session_id]
+        limit = request.args.get('limit', type=int)
+        
+        logs = scenario.scenario_log
+        if limit:
+            logs = logs[-limit:]
+        
+        return jsonify({
+            "status": "success",
+            "logs": logs,
+            "total_count": len(scenario.scenario_log)
+        })
+    
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+# 评估系统API已移除，改为使用独立的命令行工具
+# 使用方法: python cli_evaluation.py --help
 
 @socketio.on('connect')
 def handle_connect():
@@ -558,8 +977,10 @@ def handle_audio_data(data):
             conversations[session_id].append({"role": "user", "content": user_text})
             emit('user_message', {'text': user_text})
             
+            # 通知前端显示思考状态
+            emit('show_thinking')
+            
             # 获取AI回复
-            emit('status', {'message': 'AI正在思考...'})
             ai_response = chatbot.get_ai_response(user_text, session_id)
             
             # 添加AI回复到会话历史
@@ -589,10 +1010,8 @@ def handle_text_message(data):
         
         # 添加用户消息到会话历史
         conversations[session_id].append({"role": "user", "content": user_text})
-        emit('user_message', {'text': user_text})
         
         # 获取AI回复
-        emit('status', {'message': 'AI正在思考...'})
         ai_response = chatbot.get_ai_response(user_text, session_id)
         
         # 添加AI回复到会话历史
@@ -608,6 +1027,262 @@ def handle_text_message(data):
         
     except Exception as e:
         emit('error', {'message': f'处理消息时出错: {str(e)}'})
+
+@socketio.on('clear_conversation')
+def handle_clear_conversation():
+    session_id = request.sid
+    
+    try:
+        # 清空会话历史
+        if session_id in conversations:
+            conversations[session_id] = []
+        
+        # 清空API对话历史
+        if chatbot.conversation_api:
+            chatbot.conversation_api.clear_conversation(session_id)
+        
+        # 清空角色系统的对话记忆
+        memory_manager.clear_history(session_id)
+        
+        emit('status', {'message': '对话历史已清空'})
+        
+    except Exception as e:
+        emit('error', {'message': f'清空对话失败: {str(e)}'})
+
+# 多角色场景Socket.IO事件
+@socketio.on('create_scenario')
+def handle_create_scenario(data):
+    session_id = request.sid
+    
+    try:
+        scenario_type = data.get('scenario_type', 'werewolf')
+        character_ids = data.get('character_ids', [])
+        
+        if scenario_type == 'werewolf':
+            success = multi_engine.create_werewolf_scenario(session_id, character_ids)
+            if success:
+                scenario = multi_scenarios[session_id]
+                
+                emit('scenario_created', {
+                    'success': True,
+                    'message': f'狼人杀场景创建成功！{len(scenario.players)}人局',
+                    'scenario': {
+                        'type': scenario.scenario_type,
+                        'phase': scenario.phase,
+                        'players': [asdict(p) for p in scenario.players]
+                    }
+                })
+                
+                # 自动开始第一轮发言
+                handle_next_turn()
+            else:
+                emit('scenario_error', {'message': '场景创建失败，需要4-8个角色'})
+        else:
+            emit('scenario_error', {'message': '不支持的场景类型'})
+    
+    except Exception as e:
+        emit('scenario_error', {'message': f'创建场景失败: {str(e)}'})
+
+@socketio.on('next_turn')
+def handle_next_turn():
+    session_id = request.sid
+    
+    try:
+        if session_id not in multi_scenarios:
+            emit('scenario_error', {'message': '场景不存在'})
+            return
+        
+        scenario = multi_scenarios[session_id]
+        
+        if not scenario.is_active:
+            emit('game_ended', {'message': '游戏已结束'})
+            return
+        
+        # 获取下一个发言者
+        next_player = multi_engine.get_next_speaker(session_id)
+        
+        if next_player:
+            # 发送当前发言者信息
+            emit('current_speaker', {
+                'player': asdict(next_player),
+                'phase': scenario.phase,
+                'round': scenario.round_count
+            })
+            
+            # 自动生成AI回复
+            response = multi_engine.process_player_message(session_id, next_player, auto_generate=True)
+            
+            if response:
+                emit('player_message', {
+                    'player': asdict(next_player),
+                    'message': response,
+                    'phase': scenario.phase,
+                    'round': scenario.round_count
+                })
+                
+                # 检查是否该推进阶段
+                if scenario.phase == "day_discussion":
+                    alive_players = [p for p in scenario.players if p.is_alive]
+                    discussion_count = len([log for log in scenario.scenario_log 
+                                          if log.get('phase') == 'day_discussion' 
+                                          and log.get('round') == scenario.round_count])
+                    
+                    if discussion_count >= len(alive_players):
+                        # 所有人都发言完毕，自动进入投票阶段
+                        multi_engine.advance_phase(session_id)
+                        emit('phase_changed', {
+                            'new_phase': 'voting',
+                            'message': '讨论结束，开始投票阶段'
+                        })
+                        
+                        # 开始投票
+                        handle_voting_phase()
+            else:
+                emit('scenario_error', {'message': 'AI回复生成失败'})
+        
+        else:
+            # 当前阶段没有更多发言者，需要推进阶段
+            success = multi_engine.advance_phase(session_id)
+            if success:
+                emit('phase_changed', {
+                    'new_phase': scenario.phase,
+                    'round': scenario.round_count,
+                    'message': f'进入{scenario.phase}阶段'
+                })
+                
+                # 检查游戏是否结束
+                end_message = multi_engine.check_game_end(session_id)
+                if end_message:
+                    emit('game_ended', {'message': end_message})
+                else:
+                    # 继续下一轮
+                    handle_next_turn()
+    
+    except Exception as e:
+        emit('scenario_error', {'message': f'处理回合失败: {str(e)}'})
+
+def handle_voting_phase():
+    """处理投票阶段"""
+    session_id = request.sid
+    
+    try:
+        if session_id not in multi_scenarios:
+            return
+        
+        scenario = multi_scenarios[session_id]
+        alive_players = [p for p in scenario.players if p.is_alive]
+        
+        # 每个玩家进行投票
+        vote_results = {}
+        
+        for player in alive_players:
+            # 生成投票回复
+            response = multi_engine.process_player_message(session_id, player, auto_generate=True)
+            
+            if response:
+                emit('player_vote', {
+                    'player': asdict(player),
+                    'message': response,
+                    'phase': 'voting'
+                })
+                
+                # 解析投票目标（简化版）
+                vote_target = None
+                for other_player in alive_players:
+                    if other_player.character_id != player.character_id and other_player.character_name in response:
+                        vote_target = other_player.character_name
+                        break
+                
+                if not vote_target and len(alive_players) > 1:
+                    # 随机选择一个目标
+                    other_players = [p for p in alive_players if p.character_id != player.character_id]
+                    vote_target = random.choice(other_players).character_name
+                
+                if vote_target:
+                    if vote_target not in vote_results:
+                        vote_results[vote_target] = 0
+                    vote_results[vote_target] += 1
+        
+        # 统计投票结果
+        if vote_results:
+            max_votes = max(vote_results.values())
+            candidates = [name for name, votes in vote_results.items() if votes == max_votes]
+            eliminated_name = random.choice(candidates) if candidates else None
+            
+            if eliminated_name:
+                # 找到被淘汰的玩家
+                eliminated_player = next(p for p in alive_players if p.character_name == eliminated_name)
+                eliminated_player.is_alive = False
+                scenario.eliminated_players.append(eliminated_name)
+                
+                emit('player_eliminated', {
+                    'player': asdict(eliminated_player),
+                    'vote_results': vote_results,
+                    'message': f'{eliminated_name} 被投票淘汰'
+                })
+        
+        # 检查游戏是否结束
+        end_message = multi_engine.check_game_end(session_id)
+        if end_message:
+            emit('game_ended', {'message': end_message})
+        else:
+            # 继续夜晚阶段
+            multi_engine.advance_phase(session_id)
+            emit('phase_changed', {
+                'new_phase': 'night',
+                'message': '进入夜晚阶段'
+            })
+            
+            # 夜晚阶段结束后开始新一天
+            multi_engine.advance_phase(session_id)
+            emit('phase_changed', {
+                'new_phase': 'day_discussion',
+                'round': scenario.round_count,
+                'message': f'第{scenario.round_count}天开始'
+            })
+    
+    except Exception as e:
+        emit('scenario_error', {'message': f'投票阶段处理失败: {str(e)}'})
+
+@socketio.on('get_scenario_status')
+def handle_get_scenario_status():
+    session_id = request.sid
+    
+    try:
+        if session_id not in multi_scenarios:
+            emit('scenario_status', {'exists': False})
+            return
+        
+        scenario = multi_scenarios[session_id]
+        
+        emit('scenario_status', {
+            'exists': True,
+            'scenario': {
+                'type': scenario.scenario_type,
+                'phase': scenario.phase,
+                'round': scenario.round_count,
+                'is_active': scenario.is_active,
+                'players': [asdict(p) for p in scenario.players],
+                'eliminated_players': scenario.eliminated_players
+            }
+        })
+    
+    except Exception as e:
+        emit('scenario_error', {'message': f'获取状态失败: {str(e)}'})
+
+@socketio.on('end_scenario')
+def handle_end_scenario():
+    session_id = request.sid
+    
+    try:
+        if session_id in multi_scenarios:
+            del multi_scenarios[session_id]
+            emit('scenario_ended', {'message': '多角色场景已结束'})
+        else:
+            emit('scenario_error', {'message': '没有活跃的场景'})
+    
+    except Exception as e:
+        emit('scenario_error', {'message': f'结束场景失败: {str(e)}'})
 
 if __name__ == '__main__':
     # 创建必要的目录

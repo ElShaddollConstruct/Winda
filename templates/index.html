@@ -126,6 +126,22 @@
             border: 1px solid #e2e8f0;
         }
 
+        .thinking-content {
+            font-style: italic;
+            color: #6b7280;
+            opacity: 0.8;
+        }
+
+        .thinking-dots {
+            margin-right: 4px;
+        }
+
+        .dots {
+            font-weight: bold;
+            display: inline-block;
+            min-width: 20px;
+        }
+
         .controls {
             padding: 30px;
             text-align: center;
@@ -485,6 +501,185 @@
             color: white;
         }
 
+        /* 评估系统样式 */
+        .evaluation-tabs {
+            display: flex;
+            border-bottom: 1px solid #e2e8f0;
+            margin-bottom: 20px;
+        }
+
+        .eval-tab-btn {
+            padding: 10px 15px;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .eval-tab-btn.active {
+            border-bottom-color: #4f46e5;
+            color: #4f46e5;
+            font-weight: 600;
+        }
+
+        .eval-tab-btn:hover {
+            background: #f1f5f9;
+        }
+
+        .eval-tab-content {
+            display: none;
+        }
+
+        .eval-tab-content.active {
+            display: block;
+        }
+
+        .test-results {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .test-result-item {
+            margin-bottom: 15px;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #10b981;
+        }
+
+        .test-result-item.failed {
+            border-left-color: #ef4444;
+        }
+
+        .test-result-score {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .test-result-details {
+            margin-top: 5px;
+            font-size: 0.9rem;
+            color: #6b7280;
+        }
+
+        .btn-primary {
+            background: #4f46e5;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn-primary:hover {
+            background: #4338ca;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        .btn-secondary:hover {
+            background: #4b5563;
+        }
+
+        .history-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .history-score {
+            font-weight: 600;
+            padding: 4px 8px;
+            border-radius: 4px;
+            color: white;
+        }
+
+        .history-score.passed {
+            background: #10b981;
+        }
+
+        .history-score.failed {
+            background: #ef4444;
+        }
+
+        .report-content {
+            padding: 15px;
+            background: #f8fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .report-section {
+            margin-bottom: 20px;
+        }
+
+        .report-section h4 {
+            margin: 0 0 10px 0;
+            color: #1f2937;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e2e8f0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #ef4444 0%, #f59e0b 50%, #10b981 100%);
+            transition: width 0.3s ease;
+        }
+
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+
+        .loading::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            margin: -10px 0 0 -10px;
+            border: 2px solid #ccc;
+            border-top-color: #4f46e5;
+            border-radius: 50%;
+            animation: spin 1s infinite linear;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
         @media (max-width: 768px) {
             .container {
                 margin: 10px;
@@ -546,10 +741,7 @@
 
         <div class="chat-container">
             <div id="conversation" class="conversation">
-                <div class="message ai-message">
-                    <span class="avatar">🤖</span>
-                    <div class="content">你好！我是AI智能助手，请通过文字与我对话，我会为你语音播报回复内容！</div>
-                </div>
+                <!-- 初始对话内容将由JavaScript动态生成 -->
             </div>
         </div>
 
@@ -586,6 +778,9 @@
                     <button id="manageCharacters">角色管理</button>
                     <button id="createCharacter">创建角色</button>
                     <button id="configManager">配置管理</button>
+                    <button id="evaluationSystem">质量评估</button>
+                    <button id="clearConversation">清空对话</button>
+                    <button id="multiScenario">多角色场景</button>
                 </div>
             </div>
         </div>
@@ -642,6 +837,113 @@
                 </div>
             </div>
         </div>
+
+        <!-- 评估系统弹窗 -->
+        <div id="evaluationModal" class="modal">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>AI角色质量评估系统</h2>
+                    <span class="close" id="closeEvalModal">&times;</span>
+                </div>
+                <div class="modal-body">
+                    <div class="evaluation-tabs">
+                        <button class="eval-tab-btn active" data-tab="quick-test">快速测试</button>
+                        <button class="eval-tab-btn" data-tab="full-test">完整测试</button>
+                        <button class="eval-tab-btn" data-tab="custom-test">自定义测试</button>
+                        <button class="eval-tab-btn" data-tab="history">历史记录</button>
+                        <button class="eval-tab-btn" data-tab="report">评估报告</button>
+                    </div>
+
+                    <!-- 快速测试 -->
+                    <div id="quick-test" class="eval-tab-content active">
+                        <h3>快速测试</h3>
+                        <p>运行核心角色一致性测试（约30秒）</p>
+                        <button id="runQuickTest" class="btn-primary">开始快速测试</button>
+                        <div id="quickTestResults" class="test-results"></div>
+                    </div>
+
+                    <!-- 完整测试 -->
+                    <div id="full-test" class="eval-tab-content">
+                        <h3>完整测试套件</h3>
+                        <p>运行所有测试用例，包括角色背景、性格特点、语言风格和记忆保持测试</p>
+                        <button id="runFullTest" class="btn-primary">开始完整测试</button>
+                        <div id="fullTestResults" class="test-results"></div>
+                    </div>
+
+                    <!-- 自定义测试 -->
+                    <div id="custom-test" class="eval-tab-content">
+                        <h3>自定义测试</h3>
+                        <div class="form-group">
+                            <label for="customTestInput">测试消息:</label>
+                            <input type="text" id="customTestInput" placeholder="输入要测试的消息">
+                        </div>
+                        <button id="runCustomTest" class="btn-primary">运行测试</button>
+                        <div id="customTestResults" class="test-results"></div>
+                    </div>
+
+                    <!-- 历史记录 -->
+                    <div id="history" class="eval-tab-content">
+                        <h3>评估历史</h3>
+                        <button id="loadHistory" class="btn-secondary">刷新历史</button>
+                        <div id="evaluationHistory" class="history-list"></div>
+                    </div>
+
+                    <!-- 评估报告 -->
+                    <div id="report" class="eval-tab-content">
+                        <h3>总体评估报告</h3>
+                        <button id="loadReport" class="btn-secondary">生成报告</button>
+                        <div id="evaluationReport" class="report-content"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 多角色场景弹窗 -->
+    <div id="scenarioModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>🎭 多角色场景</h2>
+                <span class="close" onclick="closeModal('scenarioModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="scenarioCreator" style="display: block;">
+                    <h3>创建狼人杀游戏</h3>
+                    <p>选择4-8个角色参与狼人杀游戏：</p>
+                    
+                    <div id="scenarioCharacterList" class="character-list" style="margin: 20px 0;">
+                        <!-- 角色列表将动态加载 -->
+                    </div>
+                    
+                    <div style="text-align: center; margin-top: 20px;">
+                        <button id="createScenarioBtn" style="padding: 12px 24px; background: #10b981; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">
+                            开始狼人杀游戏
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="scenarioGame" style="display: none;">
+                    <div id="gameStatus" style="background: #f3f4f6; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                        <div id="currentPhase"></div>
+                        <div id="currentRound"></div>
+                        <div id="playersList"></div>
+                    </div>
+                    
+                    <div id="gameMessages" style="height: 300px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 20px; background: #fafafa;">
+                        <!-- 游戏消息将显示在这里 -->
+                    </div>
+                    
+                    <div style="text-align: center;">
+                        <button id="nextTurnBtn" style="padding: 10px 20px; background: #3b82f6; color: white; border: none; border-radius: 6px; margin-right: 10px; cursor: pointer;">
+                            下一轮发言
+                        </button>
+                        <button id="endScenarioBtn" style="padding: 10px 20px; background: #ef4444; color: white; border: none; border-radius: 6px; cursor: pointer;">
+                            结束游戏
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -673,6 +975,8 @@
                 this.switchCharacterButton = document.getElementById('switchCharacter');
                 this.manageCharactersButton = document.getElementById('manageCharacters');
                 this.createCharacterButton = document.getElementById('createCharacter');
+                this.clearConversationButton = document.getElementById('clearConversation');
+                this.evaluationSystemButton = document.getElementById('evaluationSystem');
                 this.characterModal = document.getElementById('characterModal');
                 this.characterList = document.getElementById('characterList');
                 this.characterForm = document.getElementById('characterForm');
@@ -680,6 +984,10 @@
                 this.modalTitle = document.getElementById('modalTitle');
                 this.closeButton = document.querySelector('.close');
                 this.cancelFormButton = document.getElementById('cancelForm');
+                
+                // 评估系统元素
+                this.evaluationModal = document.getElementById('evaluationModal');
+                this.closeEvalModal = document.getElementById('closeEvalModal');
             }
 
             initSocket() {
@@ -698,10 +1006,19 @@
                 });
 
                 this.socket.on('user_message', (data) => {
+                    // 对于音频输入，需要显示用户消息
                     this.addMessage('user', data.text);
                 });
 
+                this.socket.on('show_thinking', () => {
+                    // 显示思考状态（用于音频输入）
+                    this.addThinkingMessage();
+                });
+
                 this.socket.on('ai_message', (data) => {
+                    // 移除思考中消息
+                    this.removeThinkingMessage();
+                    // 显示AI回复
                     this.addMessage('ai', data.text);
                 });
 
@@ -710,6 +1027,8 @@
                 });
 
                 this.socket.on('error', (data) => {
+                    // 出错时也要移除思考消息
+                    this.removeThinkingMessage();
                     this.updateStatus(data.message);
                 });
             }
@@ -748,13 +1067,31 @@
                     this.openCreateCharacterForm();
                 });
 
+                this.clearConversationButton.addEventListener('click', () => {
+                    this.clearConversation();
+                });
+
+                this.evaluationSystemButton.addEventListener('click', () => {
+                    this.openEvaluationSystem();
+                });
+
                 this.configManagerButton = document.getElementById('configManager');
                 this.configManagerButton.addEventListener('click', () => {
                     this.openConfigManager();
                 });
 
+                // 多角色场景事件
+                this.multiScenarioButton = document.getElementById('multiScenario');
+                this.multiScenarioButton.addEventListener('click', () => {
+                    this.openScenarioModal();
+                });
+
                 this.closeButton.addEventListener('click', () => {
                     this.closeModal();
+                });
+
+                this.closeEvalModal.addEventListener('click', () => {
+                    this.closeEvaluationModal();
                 });
 
                 this.cancelFormButton.addEventListener('click', () => {
@@ -816,10 +1153,64 @@
             sendTextMessage() {
                 const message = this.messageInput.value.trim();
                 if (message) {
+                    // 立即显示用户消息
+                    this.addMessage('user', message);
+                    
+                    // 显示AI思考状态
+                    this.addThinkingMessage();
+                    
+                    // 发送消息到后端
                     this.socket.emit('text_message', {
                         message: message
                     });
                     this.messageInput.value = '';
+                }
+            }
+
+            addThinkingMessage() {
+                // 防止重复添加思考消息
+                this.removeThinkingMessage();
+                
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message ai-message thinking-message';
+                
+                const avatar = document.createElement('span');
+                avatar.className = 'avatar';
+                avatar.textContent = this.currentCharacter ? this.currentCharacter.avatar : '🤖';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'content thinking-content';
+                contentDiv.innerHTML = '<span class="thinking-dots">正在思考中</span><span class="dots">...</span>';
+                
+                messageDiv.appendChild(avatar);
+                messageDiv.appendChild(contentDiv);
+                
+                this.conversation.appendChild(messageDiv);
+                this.scrollToBottom();
+                
+                // 添加思考动画
+                this.startThinkingAnimation();
+            }
+
+            startThinkingAnimation() {
+                const dots = document.querySelector('.thinking-message .dots');
+                if (dots) {
+                    let dotCount = 0;
+                    this.thinkingInterval = setInterval(() => {
+                        dotCount = (dotCount + 1) % 4;
+                        dots.textContent = '.'.repeat(dotCount);
+                    }, 500);
+                }
+            }
+
+            removeThinkingMessage() {
+                const thinkingMessage = document.querySelector('.thinking-message');
+                if (thinkingMessage) {
+                    thinkingMessage.remove();
+                }
+                if (this.thinkingInterval) {
+                    clearInterval(this.thinkingInterval);
+                    this.thinkingInterval = null;
                 }
             }
 
@@ -835,7 +1226,7 @@
                 
                 const avatar = document.createElement('span');
                 avatar.className = 'avatar';
-                avatar.textContent = type === 'user' ? '👤' : '🤖';
+                avatar.textContent = type === 'user' ? '👤' : (this.currentCharacter ? this.currentCharacter.avatar : '🤖');
                 
                 const contentDiv = document.createElement('div');
                 contentDiv.className = 'content';
@@ -846,6 +1237,14 @@
                 
                 this.conversation.appendChild(messageDiv);
                 this.scrollToBottom();
+            }
+
+            updateCharacterAvatar(avatar) {
+                // 更新所有现有AI消息的头像（如果需要的话）
+                const aiMessages = this.conversation.querySelectorAll('.ai-message .avatar');
+                aiMessages.forEach(avatarElement => {
+                    avatarElement.textContent = avatar;
+                });
             }
 
             playAudio(audioUrl) {
@@ -872,11 +1271,31 @@
                     if (data.status === 'success') {
                         this.characters = data.characters;
                         this.updateCharacterSelect();
+                        
+                        // 初始化默认角色
+                        await this.initializeDefaultCharacter();
                     }
                 } catch (error) {
                     console.error('加载角色失败:', error);
                 }
             }
+
+            async initializeDefaultCharacter() {
+                // 设置默认角色（如梦）
+                const defaultCharacterId = 'rumeng';
+                const defaultCharacter = this.characters.find(c => c.character_id === defaultCharacterId);
+                
+                if (defaultCharacter) {
+                    // 设置下拉框的选中值
+                    this.characterSelect.value = defaultCharacterId;
+                    
+                    // 设置当前角色但不发送到后端
+                    this.currentCharacter = defaultCharacter;
+                    
+                    // 不显示问候语，保持界面为空
+                }
+            }
+
 
             updateCharacterSelect() {
                 this.characterSelect.innerHTML = '';
@@ -894,11 +1313,20 @@
                     const response = await fetch('/api/set_character', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ character_id: characterId })
+                        body: JSON.stringify({ 
+                            character_id: characterId,
+                            session_id: this.socket.id
+                        })
                     });
                     const data = await response.json();
                     if (data.status === 'success') {
                         this.currentCharacter = data.character;
+                        
+                        // 清空前端对话界面
+                        this.conversation.innerHTML = '';
+                        
+                        // 不显示问候语，保持界面为空
+                        
                         this.updateStatus(`已切换到角色: ${data.character.name}`);
                     } else {
                         this.updateStatus(`切换角色失败: ${data.message}`);
@@ -1134,6 +1562,577 @@
                     alert('重新加载配置失败');
                 }
             }
+
+            // 评估系统方法
+            openEvaluationSystem() {
+                this.evaluationModal.style.display = 'block';
+                this.initEvaluationTabs();
+            }
+
+            closeEvaluationModal() {
+                this.evaluationModal.style.display = 'none';
+            }
+
+            initEvaluationTabs() {
+                // 标签页切换
+                const tabButtons = document.querySelectorAll('.eval-tab-btn');
+                const tabContents = document.querySelectorAll('.eval-tab-content');
+
+                tabButtons.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const targetTab = btn.dataset.tab;
+
+                        // 更新按钮状态
+                        tabButtons.forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+
+                        // 更新内容显示
+                        tabContents.forEach(content => {
+                            content.classList.remove('active');
+                            if (content.id === targetTab) {
+                                content.classList.add('active');
+                            }
+                        });
+                    });
+                });
+
+                // 绑定评估按钮事件
+                document.getElementById('runQuickTest').addEventListener('click', () => {
+                    this.runQuickTest();
+                });
+
+                document.getElementById('runFullTest').addEventListener('click', () => {
+                    this.runFullTest();
+                });
+
+                document.getElementById('runCustomTest').addEventListener('click', () => {
+                    this.runCustomTest();
+                });
+
+                document.getElementById('loadHistory').addEventListener('click', () => {
+                    this.loadEvaluationHistory();
+                });
+
+                document.getElementById('loadReport').addEventListener('click', () => {
+                    this.loadEvaluationReport();
+                });
+            }
+
+            async runQuickTest() {
+                const button = document.getElementById('runQuickTest');
+                const resultsDiv = document.getElementById('quickTestResults');
+
+                try {
+                    button.disabled = true;
+                    button.textContent = '测试中...';
+                    resultsDiv.innerHTML = '<p>正在运行快速测试，请稍候...</p>';
+
+                    const response = await fetch('/api/evaluation/run_test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            test_type: 'quick',
+                            session_id: this.socket.id
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.displayTestResults(data.results, resultsDiv);
+                    } else {
+                        resultsDiv.innerHTML = `<p style="color: red;">测试失败: ${data.message}</p>`;
+                    }
+
+                } catch (error) {
+                    resultsDiv.innerHTML = `<p style="color: red;">测试出错: ${error.message}</p>`;
+                } finally {
+                    button.disabled = false;
+                    button.textContent = '开始快速测试';
+                }
+            }
+
+            async runFullTest() {
+                const button = document.getElementById('runFullTest');
+                const resultsDiv = document.getElementById('fullTestResults');
+
+                try {
+                    button.disabled = true;
+                    button.textContent = '测试中...';
+                    resultsDiv.innerHTML = '<p>正在运行完整测试套件，这可能需要几分钟...</p>';
+
+                    const response = await fetch('/api/evaluation/run_test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            test_type: 'full',
+                            session_id: this.socket.id
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.displayTestResults(data.results, resultsDiv);
+                    } else {
+                        resultsDiv.innerHTML = `<p style="color: red;">测试失败: ${data.message}</p>`;
+                    }
+
+                } catch (error) {
+                    resultsDiv.innerHTML = `<p style="color: red;">测试出错: ${error.message}</p>`;
+                } finally {
+                    button.disabled = false;
+                    button.textContent = '开始完整测试';
+                }
+            }
+
+            async runCustomTest() {
+                const input = document.getElementById('customTestInput');
+                const button = document.getElementById('runCustomTest');
+                const resultsDiv = document.getElementById('customTestResults');
+                const message = input.value.trim();
+
+                if (!message) {
+                    alert('请输入测试消息');
+                    return;
+                }
+
+                try {
+                    button.disabled = true;
+                    button.textContent = '测试中...';
+                    resultsDiv.innerHTML = '<p>正在处理自定义测试...</p>';
+
+                    const response = await fetch('/api/evaluation/single_test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            message: message,
+                            session_id: this.socket.id
+                        })
+                    });
+
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        this.displaySingleTestResult(data, resultsDiv);
+                    } else {
+                        resultsDiv.innerHTML = `<p style="color: red;">测试失败: ${data.message}</p>`;
+                    }
+
+                } catch (error) {
+                    resultsDiv.innerHTML = `<p style="color: red;">测试出错: ${error.message}</p>`;
+                } finally {
+                    button.disabled = false;
+                    button.textContent = '运行测试';
+                }
+            }
+
+            displayTestResults(results, container) {
+                let html = '';
+                
+                if (results.average_score !== undefined) {
+                    // 完整测试结果
+                    html += `
+                        <div class="test-summary">
+                            <h4>测试总结</h4>
+                            <p><strong>总体评分:</strong> ${results.average_score.toFixed(1)}/100</p>
+                            <p><strong>通过率:</strong> ${results.pass_rate.toFixed(1)}%</p>
+                            <p><strong>测试数量:</strong> ${results.completed_tests}/${results.total_tests}</p>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${results.average_score}%"></div>
+                        </div>
+                    `;
+
+                    if (results.category_scores) {
+                        html += '<h4>各类别评分</h4>';
+                        for (const [category, score] of Object.entries(results.category_scores)) {
+                            html += `<p><strong>${category}:</strong> ${score.toFixed(1)}/100</p>`;
+                        }
+                    }
+
+                    if (results.results && results.results.length > 0) {
+                        html += '<h4>详细结果</h4>';
+                        results.results.forEach(result => {
+                            const passedClass = result.passed ? '' : 'failed';
+                            html += `
+                                <div class="test-result-item ${passedClass}">
+                                    <div class="test-result-score">${result.test_type}: ${result.score.toFixed(1)}/100</div>
+                                    <div class="test-result-details">
+                                        测试ID: ${result.test_id}<br>
+                                        ${result.details.issues.length > 0 ? '问题: ' + result.details.issues.join(', ') : '无问题'}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                    }
+                } else {
+                    // 快速测试结果
+                    html += `
+                        <div class="test-summary">
+                            <h4>快速测试结果</h4>
+                            <p><strong>平均评分:</strong> ${results.average_score.toFixed(1)}/100</p>
+                            <p><strong>测试数量:</strong> ${results.results_count}</p>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${results.average_score}%"></div>
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
+            }
+
+            displaySingleTestResult(data, container) {
+                const result = data.evaluation;
+                const passedClass = result.passed ? '' : 'failed';
+                
+                const html = `
+                    <div class="test-result-item ${passedClass}">
+                        <div class="test-result-score">评分: ${result.score.toFixed(1)}/100 ${result.passed ? '✓' : '✗'}</div>
+                        <div class="test-result-details">
+                            <p><strong>测试消息:</strong> ${data.test_input}</p>
+                            <p><strong>AI回复:</strong> ${data.ai_response}</p>
+                            ${result.details.issues.length > 0 ? '<p><strong>发现问题:</strong> ' + result.details.issues.join(', ') + '</p>' : ''}
+                        </div>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+            }
+
+            async loadEvaluationHistory() {
+                const container = document.getElementById('evaluationHistory');
+                
+                try {
+                    container.innerHTML = '<p>加载中...</p>';
+                    
+                    const response = await fetch('/api/evaluation/history?limit=20');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success' && data.history.length > 0) {
+                        let html = '';
+                        data.history.forEach(item => {
+                            const scoreClass = item.passed ? 'passed' : 'failed';
+                            const date = new Date(item.timestamp).toLocaleString('zh-CN');
+                            
+                            html += `
+                                <div class="history-item">
+                                    <div>
+                                        <strong>${item.test_type}</strong><br>
+                                        <small>${date}</small>
+                                    </div>
+                                    <div class="history-score ${scoreClass}">
+                                        ${item.score.toFixed(1)}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>暂无评估历史</p>';
+                    }
+                    
+                } catch (error) {
+                    container.innerHTML = `<p style="color: red;">加载失败: ${error.message}</p>`;
+                }
+            }
+
+            async loadEvaluationReport() {
+                const container = document.getElementById('evaluationReport');
+                
+                try {
+                    container.innerHTML = '<p>生成中...</p>';
+                    
+                    const response = await fetch('/api/evaluation/report');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success' && data.report) {
+                        const report = data.report;
+                        let html = '';
+                        
+                        if (report.message) {
+                            html = `<p>${report.message}</p>`;
+                        } else {
+                            html = `
+                                <div class="report-section">
+                                    <h4>总体表现</h4>
+                                    <p><strong>总评估次数:</strong> ${report.total_evaluations}</p>
+                                    <p><strong>近期平均分:</strong> ${report.recent_average.toFixed(1)}/100</p>
+                                    <p><strong>近期通过率:</strong> ${report.recent_pass_rate.toFixed(1)}%</p>
+                                    <p><strong>发展趋势:</strong> ${report.trend === 'improving' ? '改善中 📈' : '稳定 📊'}</p>
+                                </div>
+                            `;
+                            
+                            if (report.last_evaluation) {
+                                const lastEval = report.last_evaluation;
+                                html += `
+                                    <div class="report-section">
+                                        <h4>最近一次评估</h4>
+                                        <p><strong>测试类型:</strong> ${lastEval.test_type}</p>
+                                        <p><strong>评分:</strong> ${lastEval.score.toFixed(1)}/100</p>
+                                        <p><strong>状态:</strong> ${lastEval.passed ? '通过 ✓' : '未通过 ✗'}</p>
+                                        <p><strong>时间:</strong> ${new Date(lastEval.timestamp).toLocaleString('zh-CN')}</p>
+                                    </div>
+                                `;
+                            }
+                        }
+                        
+                        container.innerHTML = html;
+                    } else {
+                        container.innerHTML = '<p>生成报告失败</p>';
+                    }
+                    
+                } catch (error) {
+                    container.innerHTML = `<p style="color: red;">生成失败: ${error.message}</p>`;
+                }
+            }
+
+            clearConversation() {
+                if (confirm('确定要清空所有对话记录吗？')) {
+                    // 清空前端对话显示
+                    this.conversation.innerHTML = '';
+                    
+                    // 通知后端清空对话历史
+                    if (this.socket) {
+                        this.socket.emit('clear_conversation');
+                    }
+                    
+                    this.updateStatus('对话记录已清空');
+                }
+            }
+
+            // 多角色场景相关方法
+            async openScenarioModal() {
+                // 显示多角色场景弹窗
+                document.getElementById('scenarioModal').style.display = 'block';
+                
+                // 初始化场景创建界面
+                document.getElementById('scenarioCreator').style.display = 'block';
+                document.getElementById('scenarioGame').style.display = 'none';
+                
+                // 加载角色列表用于选择
+                await this.loadScenarioCharacterList();
+                
+                // 绑定事件
+                this.bindScenarioEvents();
+            }
+
+            async loadScenarioCharacterList() {
+                try {
+                    const response = await fetch('/api/characters');
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        const container = document.getElementById('scenarioCharacterList');
+                        let html = '';
+                        
+                        data.characters.forEach(char => {
+                            html += `
+                                <div class="character-item">
+                                    <div class="character-info">
+                                        <input type="checkbox" id="char_${char.character_id}" value="${char.character_id}" class="scenario-character-checkbox">
+                                        <label for="char_${char.character_id}" style="margin-left: 8px;">
+                                            ${char.avatar} ${char.name} - ${char.identity}
+                                        </label>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        
+                        container.innerHTML = html;
+                    }
+                } catch (error) {
+                    console.error('加载角色列表失败:', error);
+                }
+            }
+
+            bindScenarioEvents() {
+                // 绑定创建场景按钮
+                const createBtn = document.getElementById('createScenarioBtn');
+                if (createBtn && !createBtn.hasAttribute('data-bound')) {
+                    createBtn.setAttribute('data-bound', 'true');
+                    createBtn.addEventListener('click', () => {
+                        this.createScenario();
+                    });
+                }
+
+                // 绑定下一轮按钮
+                const nextTurnBtn = document.getElementById('nextTurnBtn');
+                if (nextTurnBtn && !nextTurnBtn.hasAttribute('data-bound')) {
+                    nextTurnBtn.setAttribute('data-bound', 'true');
+                    nextTurnBtn.addEventListener('click', () => {
+                        this.socket.emit('next_turn');
+                    });
+                }
+
+                // 绑定结束游戏按钮
+                const endBtn = document.getElementById('endScenarioBtn');
+                if (endBtn && !endBtn.hasAttribute('data-bound')) {
+                    endBtn.setAttribute('data-bound', 'true');
+                    endBtn.addEventListener('click', () => {
+                        this.endScenario();
+                    });
+                }
+
+                // 绑定Socket.IO事件
+                this.bindScenarioSocketEvents();
+            }
+
+            bindScenarioSocketEvents() {
+                // 场景创建成功
+                this.socket.on('scenario_created', (data) => {
+                    document.getElementById('scenarioCreator').style.display = 'none';
+                    document.getElementById('scenarioGame').style.display = 'block';
+                    
+                    this.updateGameStatus(data.scenario);
+                    this.addGameMessage('系统', data.message, 'info');
+                });
+
+                // 当前发言者
+                this.socket.on('current_speaker', (data) => {
+                    this.addGameMessage('系统', `轮到 ${data.player.character_avatar} ${data.player.character_name} 发言`, 'info');
+                });
+
+                // 玩家消息
+                this.socket.on('player_message', (data) => {
+                    this.addGameMessage(
+                        `${data.player.character_avatar} ${data.player.character_name}`,
+                        data.message,
+                        'player'
+                    );
+                });
+
+                // 玩家投票
+                this.socket.on('player_vote', (data) => {
+                    this.addGameMessage(
+                        `${data.player.character_avatar} ${data.player.character_name}`,
+                        data.message,
+                        'vote'
+                    );
+                });
+
+                // 阶段变化
+                this.socket.on('phase_changed', (data) => {
+                    this.addGameMessage('系统', data.message, 'phase');
+                    this.updateGamePhase(data.new_phase, data.round);
+                });
+
+                // 玩家淘汰
+                this.socket.on('player_eliminated', (data) => {
+                    this.addGameMessage('系统', data.message, 'elimination');
+                    
+                    let voteInfo = '投票结果：';
+                    for (const [name, votes] of Object.entries(data.vote_results)) {
+                        voteInfo += ` ${name}(${votes}票)`;
+                    }
+                    this.addGameMessage('系统', voteInfo, 'info');
+                });
+
+                // 游戏结束
+                this.socket.on('game_ended', (data) => {
+                    this.addGameMessage('系统', `🎉 ${data.message}`, 'end');
+                    document.getElementById('nextTurnBtn').disabled = true;
+                });
+
+                // 场景错误
+                this.socket.on('scenario_error', (data) => {
+                    this.addGameMessage('系统', `❌ ${data.message}`, 'error');
+                });
+
+                // 场景结束
+                this.socket.on('scenario_ended', (data) => {
+                    document.getElementById('scenarioModal').style.display = 'none';
+                    this.updateStatus(data.message);
+                });
+            }
+
+            createScenario() {
+                const checkboxes = document.querySelectorAll('.scenario-character-checkbox:checked');
+                const selectedCharacters = Array.from(checkboxes).map(cb => cb.value);
+                
+                if (selectedCharacters.length < 4) {
+                    alert('请至少选择4个角色');
+                    return;
+                }
+                
+                if (selectedCharacters.length > 8) {
+                    alert('最多只能选择8个角色');
+                    return;
+                }
+
+                // 发送创建场景请求
+                this.socket.emit('create_scenario', {
+                    scenario_type: 'werewolf',
+                    character_ids: selectedCharacters
+                });
+            }
+
+            updateGameStatus(scenario) {
+                document.getElementById('currentPhase').textContent = `当前阶段: ${this.getPhaseDisplayName(scenario.phase)}`;
+                document.getElementById('currentRound').textContent = `第 ${scenario.round || 1} 天`;
+                
+                let playersHtml = '参与玩家: ';
+                scenario.players.forEach(player => {
+                    const statusIcon = player.is_alive ? '✅' : '💀';
+                    playersHtml += `${statusIcon} ${player.character_avatar} ${player.character_name} `;
+                });
+                document.getElementById('playersList').innerHTML = playersHtml;
+            }
+
+            updateGamePhase(phase, round) {
+                document.getElementById('currentPhase').textContent = `当前阶段: ${this.getPhaseDisplayName(phase)}`;
+                if (round) {
+                    document.getElementById('currentRound').textContent = `第 ${round} 天`;
+                }
+            }
+
+            getPhaseDisplayName(phase) {
+                const phaseNames = {
+                    'day_discussion': '白天讨论',
+                    'voting': '投票阶段',
+                    'night': '夜晚阶段'
+                };
+                return phaseNames[phase] || phase;
+            }
+
+            addGameMessage(sender, message, type = 'normal') {
+                const messagesContainer = document.getElementById('gameMessages');
+                const messageElement = document.createElement('div');
+                
+                const typeClasses = {
+                    'info': 'color: #3b82f6;',
+                    'player': 'background: #f3f4f6; padding: 8px; border-radius: 6px; margin: 4px 0;',
+                    'vote': 'background: #fef3c7; padding: 8px; border-radius: 6px; margin: 4px 0;',
+                    'phase': 'color: #10b981; font-weight: bold;',
+                    'elimination': 'color: #ef4444; font-weight: bold;',
+                    'end': 'color: #8b5cf6; font-weight: bold; font-size: 1.1em;',
+                    'error': 'color: #ef4444;'
+                };
+                
+                const style = typeClasses[type] || '';
+                
+                messageElement.innerHTML = `
+                    <div style="${style}">
+                        <strong>${sender}:</strong> ${message}
+                        <small style="color: #6b7280; margin-left: 10px;">${new Date().toLocaleTimeString()}</small>
+                    </div>
+                `;
+                
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+
+            endScenario() {
+                if (confirm('确定要结束当前多角色场景吗？')) {
+                    this.socket.emit('end_scenario');
+                }
+            }
+        }
+
+        // 关闭弹窗的全局函数
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
         }
 
         // 初始化应用
