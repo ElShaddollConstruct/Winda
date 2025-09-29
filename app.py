@@ -804,7 +804,7 @@ class ConversationAPI:
         self.conversation_history: Dict[str, List[Dict[str, Any]]] = {}
         
         # 设置API密钥和基础URL
-        self.model_key = model_key or os.getenv('OPENAI_API_KEY', 'sk-fPz5uPZn2ubb9Qexx62yWcFl55Z46iRdBfdlvnjufQ6o0BVo')
+        self.model_key = model_key or os.getenv('OPENAI_API_KEY', 'YOUR_API_KEY_HERE')
         self.api_base = api_base or os.getenv('OPENAI_API_BASE', 'https://api.huatuogpt.cn/v1')
         
         # 验证API密钥是否有效
@@ -945,7 +945,7 @@ class ConversationAPI:
         })
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-key-change-in-production')
 socketio = SocketIO(app, cors_allowed_origins="*")
 
 # 全局变量
